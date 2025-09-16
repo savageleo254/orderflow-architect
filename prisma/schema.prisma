@@ -1,0 +1,267 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  balance       Float    @default(0.0)
+  currency      String   @default("USD")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+  orders        Order[]
+  trades        Trade[]
+  positions     Position[]
+  auditLogs     AuditLog[]
+  watchlists    Watchlist[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model Asset {
+  id          String   @id @default(cuid())
+  symbol      String   @unique
+  name        String
+  type        String   // 'stock', 'crypto', 'forex', 'commodity'
+  exchange    String?
+  currency    String   @default("USD")
+  price       Float?
+  change24h   Float?
+  volume24h   Float?
+  marketCap   Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  orders      Order[]
+  trades      Trade[]
+  positions   Position[]
+  watchlists  WatchlistItem[]
+  marketData  MarketData[]
+
+  @@map("assets")
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  userId          String
+  assetId         String
+  type            OrderType   // 'market', 'limit', 'stop', 'stop_limit'
+  side            OrderSide   // 'buy', 'sell'
+  quantity        Float
+  price           Float?      // For limit orders
+  stopPrice       Float?      // For stop orders
+  status          OrderStatus // 'pending', 'open', 'filled', 'cancelled', 'rejected'
+  timeInForce     TimeInForce // 'day', 'gtc', 'ioc', 'fok'
+  filledQuantity  Float       @default(0)
+  averagePrice    Float?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  expiresAt       DateTime?
+
+  // Relations
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset           Asset       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  trades          Trade[]
+  auditLogs       AuditLog[]
+
+  @@map("orders")
+}
+
+model Trade {
+  id          String   @id @default(cuid())
+  orderId     String
+  userId      String
+  assetId     String
+  positionId  String?  // Link to position
+  quantity    Float
+  price       Float
+  side        OrderSide // 'buy', 'sell'
+  commission  Float    @default(0)
+  createdAt   DateTime @default(now())
+
+  // Relations
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset       Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  position    Position? @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  auditLogs   AuditLog[]
+
+  @@map("trades")
+}
+
+model Position {
+  id          String   @id @default(cuid())
+  userId      String
+  assetId     String
+  quantity    Float
+  averagePrice Float
+  unrealizedPnL Float?
+  realizedPnL    Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset       Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  trades      Trade[]
+
+  @@unique([userId, assetId])
+  @@map("positions")
+}
+
+model MarketData {
+  id          String   @id @default(cuid())
+  assetId     String
+  timestamp   DateTime
+  open        Float
+  high        Float
+  low         Float
+  close       Float
+  volume      Float?
+  bid         Float?
+  ask         Float?
+  bidSize     Float?
+  askSize     Float?
+
+  // Relations
+  asset       Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@map("market_data")
+  @@index([assetId, timestamp])
+}
+
+model Watchlist {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items       WatchlistItem[]
+
+  @@map("watchlists")
+}
+
+model WatchlistItem {
+  id           String   @id @default(cuid())
+  watchlistId  String
+  assetId      String
+  createdAt    DateTime @default(now())
+
+  // Relations
+  watchlist    Watchlist @relation(fields: [watchlistId], references: [id], onDelete: Cascade)
+  asset        Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([watchlistId, assetId])
+  @@map("watchlist_items")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  action      String   // 'order_created', 'order_cancelled', 'trade_executed', etc.
+  entityType  String   // 'order', 'trade', 'position', 'user'
+  entityId    String
+  oldValues   String?  // JSON
+  newValues   String?  // JSON
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  order       Order?   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  trade       Trade?   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@map("audit_logs")
+}
+
+// Enums
+enum OrderType {
+  MARKET
+  LIMIT
+  STOP
+  STOP_LIMIT
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum OrderStatus {
+  PENDING
+  OPEN
+  FILLED
+  CANCELLED
+  REJECTED
+}
+
+enum TimeInForce {
+  DAY
+  GTC  // Good Till Cancelled
+  IOC  // Immediate or Cancel
+  FOK  // Fill or Kill
+}

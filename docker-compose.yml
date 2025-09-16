@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  aria-app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: aria-trading-platform
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:./data/production.db
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-fallback-secret-change-in-production}
+      - NEXTAUTH_URL=http://localhost:3000
+      - LOG_LEVEL=INFO
+      - TRADING_MODE=simulation
+      - ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - aria-network
+
+  # Optional: Add Redis for caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: aria-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - aria-network
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+networks:
+  aria-network:
+    driver: bridge
+
+volumes:
+  redis_data:
+    driver: local
